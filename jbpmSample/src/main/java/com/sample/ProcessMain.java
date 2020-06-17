@@ -16,17 +16,24 @@
 
 package com.sample;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Persistence;
 
-import org.drools.core.marshalling.impl.ProtobufMessages.KnowledgeBase;
 import org.jbpm.bpmn2.xml.XmlBPMNProcessDumper;
+import org.jbpm.process.core.event.EventFilter;
+import org.jbpm.process.core.event.EventTypeFilter;
 import org.jbpm.ruleflow.core.RuleFlowProcess;
 import org.jbpm.ruleflow.core.RuleFlowProcessFactory;
+import org.jbpm.runtime.manager.impl.deploy.DeploymentDescriptorManager;
+import org.jbpm.test.JBPMHelper;
+import org.jbpm.workflow.core.node.EventNode;
+import org.jbpm.workflow.core.node.HumanTaskNode;
 import org.kie.api.KieBase;
 import org.kie.api.io.ResourceType;
 import org.kie.api.runtime.manager.RuntimeEnvironmentBuilder;
@@ -39,8 +46,8 @@ import org.kie.internal.runtime.StatefulKnowledgeSession;
 import org.kie.internal.runtime.conf.AuditMode;
 import org.kie.internal.runtime.conf.DeploymentDescriptor;
 import org.kie.internal.runtime.manager.context.EmptyContext;
-import org.kie.internal.runtime.manager.deploy.DeploymentDescriptorManager;
-import org.kie.test.util.db.PersistenceUtil;
+/*import org.kie.internal.runtime.manager.deploy.DeploymentDescriptorManager;
+import org.kie.test.util.db.PersistenceUtil;*/
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,7 +65,8 @@ public class ProcessMain {
 		// StatefulKnowledgeSession ksession = newStatefulKnowledgeSession(kbase);
 		// start a new process instance
 		// ksession.startProcess("com.sample.bpmn.hello");
-		fluentAPI();
+		//fluentAPI();
+		createEventWithFluent();
 		logger.info("Process started ...");
 	}
 
@@ -78,7 +86,10 @@ public class ProcessMain {
 			properties.put("password", "");
 			properties.put("url", "jdbc:h2:tcp://localhost/~/jbpm-db");
 			properties.put("datasourceName", "jdbc/jbpm-ds");
-			PersistenceUtil.setupPoolingDataSource(properties);
+			//PersistenceUtil.setupPoolingDataSource(properties);
+			JBPMHelper.setupDataSource();
+			JBPMHelper.startH2Server();
+			//PersistenceUtil.
 			Map<String, String> map = new HashMap<String, String>();
 			map.put("hibernate.dialect", "org.hibernate.dialect.H2Dialect");
 			EntityManagerFactory emf = Persistence.createEntityManagerFactory("org.jbpm.persistence.jpa");
@@ -118,5 +129,49 @@ public class ProcessMain {
 		ksession.startProcess("org.jbpm.HelloWorld");
 		logger.info("Process started ...");
 
+	}
+	
+	public static void createEventWithFluent() {
+		
+		 RuleFlowProcessFactory factory = RuleFlowProcessFactory.createProcess("com.sample.process");
+         factory
+             .eventNode(4)
+             .name("TimerEvent")
+             .eventType("TimerXXX") // Place holder to be swapped later because "attachedTo" is unknown at this moment
+             .done();
+         
+         RuleFlowProcess process = factory.validate().getProcess();
+         
+         // set meta data parameters and attach the filter for BoundaryTimer
+         HumanTaskNode humanTaskNode = (HumanTaskNode)process.getNode(2);
+         EventNode eventNode = (EventNode)process.getNode(4);
+         
+         String nodeAttachedTo = (String)humanTaskNode.getMetaData("UniqueId");
+         
+         String timeCycle = "3s###3s";
+         
+         eventNode.setMetaData("AttachedTo", nodeAttachedTo);
+         eventNode.setMetaData("CancelActivity", false);
+         eventNode.setMetaData("TimeCycle", timeCycle);
+         EventTypeFilter eventFilter = new EventTypeFilter();
+         eventFilter.setType("Timer-" + nodeAttachedTo + "-" + timeCycle);
+         List<EventFilter> eventFilters = new ArrayList<EventFilter>();
+         eventFilters.add(eventFilter);
+         eventNode.setEventFilters(eventFilters);
+         process.addNode(eventNode);
+         
+         KnowledgeBuilder kbuilder = KnowledgeBuilderFactory.newKnowledgeBuilder();
+
+ 		kbuilder.add(ResourceFactory.newByteArrayResource(
+
+ 				XmlBPMNProcessDumper.INSTANCE.dump(process).getBytes()), ResourceType.BPMN2);
+
+ 		KieBase kbase = kbuilder.newKieBase();
+
+ 		StatefulKnowledgeSession ksession = newStatefulKnowledgeSession(kbase);
+ 		// start a new process instance
+ 		ksession.startProcess("com.sample.process");
+ 		logger.info("Process started ...");
+		
 	}
 }

@@ -13,7 +13,7 @@
 	<description>A sample jBPM Maven project</description>
 
 	<properties>
-		<runtime.version>7.38.0.Final</runtime.version>
+		<runtime.version>7.7.0.Final-redhat-7</runtime.version>
 	</properties>
 
 	<repositories>
